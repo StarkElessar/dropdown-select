@@ -34,6 +34,30 @@
     font-family: var(--multi-select-font-family);
 }
 
+.multi-select_disabled {
+    opacity: var(--multi-select-disabled-opacity, 0.6);
+    cursor: not-allowed;
+}
+
+.multi-select_disabled .multi-select__button {
+    background-color: var(--multi-select-disabled-bg, #f5f5f5);
+    border-color: var(--multi-select-disabled-border, #ddd);
+    color: var(--multi-select-disabled-color, #999);
+    cursor: not-allowed;
+}
+
+.multi-select_disabled .multi-select__dropdown {
+    pointer-events: none;
+}
+
+.multi-select_disabled .multi-select__option {
+    opacity: var(--multi-select-disabled-option-opacity, 0.6);
+}
+
+.multi-select_disabled input[type="checkbox"] {
+    cursor: not-allowed;
+}
+
 .multi-select__button {
     width: 100%;
     padding: var(--multi-select-padding);

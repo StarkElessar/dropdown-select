@@ -3,7 +3,7 @@ interface HTMLSelectElementWithOptions extends HTMLSelectElement {
 }
 
 // Определяем типы для событий
-type EventType = 'dataBound' | 'open' | 'close' | 'change';
+type EventType = 'dataBound' | 'open' | 'close' | 'change' | 'stateChange';
 type EventCallback = (data: any) => void;
 
 // Константы для дефолтных текстовых значений
@@ -41,7 +41,25 @@ interface MultiSelectOptions {
     };
 }
 
-export class MultiSelect {
+// Интерфейс для публичного API компонента
+export interface IMultiSelect {
+    // Методы для работы с событиями
+    bind(eventType: EventType, callback: EventCallback): void;
+    unbind(eventType: EventType, callback: EventCallback): void;
+
+    // Методы для работы со значениями
+    setValue(values: string[]): void;
+    getSelectedValues(): string[];
+
+    // Методы управления состоянием
+    enable(isEnabled: boolean): void;
+    isDropdownOpen(): boolean;
+
+    // Метод очистки
+    destroy(): void;
+}
+
+export class MultiSelect implements IMultiSelect {
     private options: MultiSelectOptions;
     private originalSelect: HTMLSelectElementWithOptions;
     private selectOptions: HTMLOptionElement[];
@@ -51,6 +69,7 @@ export class MultiSelect {
     private button!: HTMLButtonElement;
     private dropdown!: HTMLDivElement;
     private isOpen: boolean = false;
+    private isEnabled: boolean = true;
 
     constructor(selectElement: HTMLSelectElementWithOptions, options: Partial<MultiSelectOptions> = {}) {
         this.options = {
@@ -76,12 +95,16 @@ export class MultiSelect {
         this.eventHandlers = new Map();
 
         this.init();
-        // Уведомляем о завершении инициализации
-        this.trigger('dataBound', { options: this.selectOptions });
+
+        // Используем queueMicrotask чтобы дать время на подписку
+        queueMicrotask(() => {
+            this.trigger('dataBound', { options: this.selectOptions });
+        });
     }
 
     private init() {
         const { wrapperClassName, buttonClassName, dropdownClassName, texts } = this.options;
+
         // Создаем контейнер для кастомного селекта
         this.container = document.createElement('div');
         this.container.className = wrapperClassName;
@@ -91,22 +114,28 @@ export class MultiSelect {
         this.button.className = buttonClassName;
         this.button.textContent = texts.placeholder;
         this.button.onclick = this.toggleDropdown;
+        this.container.appendChild(this.button);
 
         // Создаем выпадающий список
         this.dropdown = document.createElement('div');
         this.dropdown.className = dropdownClassName;
         this.dropdown.onchange = this.handleOptionChange;
-
-        // Добавляем элементы в контейнер
-        this.container.appendChild(this.button);
         this.container.appendChild(this.dropdown);
 
         // Создаем чекбоксы для каждой опции
         this.createCheckboxes();
 
-        // Скрываем оригинальный селект
-        this.originalSelect.style.display = 'none';
-        this.originalSelect.parentNode?.insertBefore(this.container, this.originalSelect);
+        // Сохраняем ссылку на родителя оригинального селекта
+        const parentNode = this.originalSelect.parentNode;
+
+        if (parentNode) {
+            // Вставляем контейнер перед оригинальным селектом
+            parentNode.insertBefore(this.container, this.originalSelect);
+            // Перемещаем оригинальный селект внутрь контейнера
+            this.container.appendChild(this.originalSelect);
+            // Скрываем оригинальный селект
+            this.originalSelect.style.display = 'none';
+        }
     }
 
     private createOptionElement(value: string, text: string): HTMLLIElement {
@@ -124,13 +153,12 @@ export class MultiSelect {
     private createCheckboxes() {
         const ul = document.createElement('ul');
         ul.className = this.options.listClassName;
-
-        // Добавляем опцию "Все"
-        const allOption = this.createOptionElement(
-            DEFAULT_TEXTS.ALL_OPTION_VALUE,
-            this.options.texts.allOptionText
+        ul.appendChild(
+            this.createOptionElement(
+                DEFAULT_TEXTS.ALL_OPTION_VALUE,
+                this.options.texts.allOptionText
+            )
         );
-        ul.appendChild(allOption);
 
         // Добавляем остальные опции
         this.selectOptions.forEach(option => {
@@ -148,6 +176,7 @@ export class MultiSelect {
             this.eventHandlers.set(eventType, new Set());
         }
         this.eventHandlers.get(eventType)?.add(callback);
+        console.log(this.eventHandlers);
     }
 
     // Метод для отвязки обработчиков событий
@@ -161,7 +190,7 @@ export class MultiSelect {
     }
 
     private handleOptionChange = ({ target }: Event) => {
-        if (target instanceof HTMLInputElement) {
+        if (this.isEnabled && target instanceof HTMLInputElement) {
             if (target.value === DEFAULT_TEXTS.ALL_OPTION_VALUE) {
                 this.handleSelectAll(target.checked);
             }
@@ -172,16 +201,18 @@ export class MultiSelect {
     }
 
     private toggleDropdown = () => {
-        this.isOpen = !this.isOpen;
-        this.dropdown.classList.toggle(DEFAULT_CLASSES.DROPDOWN_OPEN);
+        if (this.isEnabled) {
+            this.isOpen = !this.isOpen;
+            this.dropdown.classList.toggle(DEFAULT_CLASSES.DROPDOWN_OPEN);
 
-        if (this.isOpen) {
-            document.addEventListener('click', this.handleDocumentClick);
-            this.trigger('open', { timestamp: new Date() });
-        }
-        else {
-            document.removeEventListener('click', this.handleDocumentClick);
-            this.trigger('close', { timestamp: new Date() });
+            if (this.isOpen) {
+                document.addEventListener('click', this.handleDocumentClick);
+                this.trigger('open', { timestamp: new Date() });
+            }
+            else {
+                document.removeEventListener('click', this.handleDocumentClick);
+                this.trigger('close', { timestamp: new Date() });
+            }
         }
     }
 
@@ -220,7 +251,7 @@ export class MultiSelect {
     private handleSingleOptionChange(checkbox: HTMLInputElement) {
         if (checkbox.checked) {
             this.selectedValues.add(checkbox.value);
-        } 
+        }
         else {
             const allCheckbox = this.dropdown.querySelector<HTMLInputElement>(`input[value="${DEFAULT_TEXTS.ALL_OPTION_VALUE}"]`);
             allCheckbox && (allCheckbox.checked = false);
@@ -252,19 +283,76 @@ export class MultiSelect {
     }
 
     public setValue(values: string[]) {
-        this.selectedValues.clear();
-        const checkboxes = this.dropdown.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
+        if (this.isEnabled) {
+            this.selectedValues.clear();
+            const checkboxes = this.dropdown.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
 
-        checkboxes.forEach(checkbox => {
-            if (values.includes(checkbox.value)) {
-                checkbox.checked = true;
-                this.selectedValues.add(checkbox.value);
-            }
-            else {
-                checkbox.checked = false;
-            }
+            checkboxes.forEach(checkbox => {
+                if (values.includes(checkbox.value)) {
+                    checkbox.checked = true;
+                    this.selectedValues.add(checkbox.value);
+                }
+                else {
+                    checkbox.checked = false;
+                }
+            });
+
+            this.updateButtonText();
+        }
+    }
+
+    public getSelectedValues(): string[] {
+        return Array.from(this.selectedValues);
+    }
+
+    public enable(isEnabled: boolean) {
+        this.isEnabled = isEnabled;
+
+        if (!isEnabled) {
+            // Закрываем дропдаун при отключении
+            this.closeDropdown();
+        }
+
+        // Обновляем состояние и внешний вид
+        this.updateEnabledState();
+
+        // Уведомляем о изменении состояния
+        this.trigger('stateChange', {
+            type: 'enabled',
+            isEnabled,
+            timestamp: new Date()
         });
+    }
 
-        this.updateButtonText();
+    private updateEnabledState(): void {
+        if (this.isEnabled) {
+            this.container.classList.remove('multi-select_disabled');
+            this.button.removeAttribute('disabled');
+            this.originalSelect.disabled = false;
+        }
+        else {
+            this.container.classList.add('multi-select_disabled');
+            this.button.setAttribute('disabled', 'disabled');
+            this.originalSelect.disabled = true;
+        }
+    }
+
+    public isDropdownOpen(): boolean {
+        return this.isOpen;
+    }
+
+    public destroy(): void {
+        // Отписываемся от всех событий
+        document.removeEventListener('click', this.handleDocumentClick);
+
+        // Очищаем обработчики событий
+        this.eventHandlers.clear();
+
+        // Восстанавливаем оригинальный селект
+        this.originalSelect.style.display = '';
+        this.originalSelect.disabled = false;
+
+        // Удаляем наш контейнер
+        this.container.remove();
     }
 } 
