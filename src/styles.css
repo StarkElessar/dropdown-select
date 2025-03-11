@@ -74,7 +74,7 @@
     border-radius: var(--multi-select-border-radius);
     margin-top: var(--multi-select-dropdown-margin);
     overflow: hidden;
-    z-index: 1000;
+    z-index: 10;
     box-shadow: var(--multi-select-shadow);
 }
 
@@ -90,8 +90,8 @@
     overflow-y: auto;
 }
 
-.multi-select__option label {
-    padding: var(--multi-select-option-padding);
+.multi-select__option {
+    user-select: none;
 }
 
 .multi-select__option:hover {
@@ -99,6 +99,7 @@
 }
 
 .multi-select__option label {
+    padding: var(--multi-select-option-padding);
     display: flex;
     align-items: center;
     cursor: pointer;
