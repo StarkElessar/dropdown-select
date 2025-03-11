@@ -30,9 +30,19 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
+        // Подписка на обновление данных
+        multiSelect.bind('dataBound', (data) => {
+            console.log('Data updated:', data);
+        });
+
 
         setTimeout(() => {
-            multiSelect.enable(false);
-        }, 2000);
+            // Пример установки новых данных через массив объектов
+            multiSelect.setDataSource([
+                { value: '123', text: 'Option 111' },
+                { value: '1255', text: 'Option 222' },
+                { value: '1234', text: 'Option 333' }
+            ]);
+        }, 4000);
     }
 });
